@@ -1,602 +1,278 @@
+# Oracle Student앱
+# CRUD 데이터베이스 DML(SELECT, INSERT, UPDATE, DELETE)
+## CREATE(INSERT), REQUEST(SELECT), UPDATE(DATE), DELETE(DELETE)
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
-from PyQt5 import QtWidgets, QtGui, uic
-from datetime import datetime
-import cx_Oracle as oci
-import uuid
-from prod import prodname
+from PyQt5 import QtGui, QtWidgets, uic
 
-#DB연결
-sid_m = 'XE'
-host_m = '210.119.14.67'
-port_m = 1521
-username_m = 'MINIPRO'
-password_m = '12345'
-basic_msg = '편의점 물품 관리 시스템 v 1.0'
-main_id = ['sumin0759@gmail.com','dongho7736@gmail.com','a']
-deli_id = ['guppy135@naver.com','rudwnzlxl6@naver.com',"b"]
-pwd = ['123456']
+# Oracle 모듈
+import cx_Oracle as oci
+
+# DB 연결 정보 설정
+sid = 'XE'  # 오라클 DB 식별자
+host = 'localhost'  # DB 서버 주소 (현재 컴퓨터 사용)
+port = 1521  # 오라클 DB 기본 포트
+username = 'madang'  # 사용자 계정
+password = 'madang'  # 비밀번호
+basic_msg = '학생정보 v1.0'
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
-        self.initUI()
+        self.initUI()  # UI 설정 함수 호출
+        self.loadData()  # DB에서 데이터 불러오기
 
     def initUI(self):
-        uic.loadUi('./mini_pro1/main.ui',self)
-        self.setWindowTitle('편의점 물품 관리 시스템')
-    
-        self.btn_login.clicked.connect(self.btn_login_click)
+        uic.loadUi('./ToyProject/studentdb.ui', self)  # UI 파일 로드
+        self.setWindowTitle('학생정보앱')  # 창 제목 설정
+        self.setWindowIcon(QIcon('./image/students.png'))  # 창 아이콘 설정
 
-    def btn_login_click(self):
-        login_id = self.input_id.text()
-        login_pwd = self.input_pwd.text()
+        # 상태바에 메시지 추가
+        self.statusbar.showMessage(basic_msg)
 
-        if (login_id == '') and (login_pwd == ''):
-            QMessageBox.about(self,'경고','아이디와 비밀번호 모두 기입하시오!')           
-            return 
-        elif login_id == '':
-            QMessageBox.warning(self,'경고','아이디를 입력하시오!')
-            return
-        elif login_pwd == '':
-            QMessageBox.warning(self,'경고','비밀번호를 입력하시오!')
-            return
-        elif login_id in main_id and login_pwd in pwd:
-            self.btn_main_to_second()
-            return
-        elif login_id in deli_id and login_pwd in pwd:
-            self.btn_main_to_sub()
-            return
-        else: pass
 
-    def btn_main_to_second(self):
-        self.prod = ProdWindow()
-        self.prod.show()                
-        self.close()                     
-        self.deleteLater()
+        # 버튼에 아이콘추가
+        self.btn_add.setIcon(QIcon('./image/add-user.png'))
+        self.btn_mod.setIcon(QIcon('./image/edit-user.png'))
+        self.btn_del.setIcon(QIcon('./image/del-user.png'))
 
-    def btn_main_to_sub(self): 
-        self.prod_deli = ProdSubWindow()  
-        self.prod_deli.show()
-        self.close()                       
-        self.deleteLater() 
-
-class ProdWindow(QDialog,QWidget): 
-    def __init__(self):
-        super(ProdWindow,self).__init__()
-        self.initUi()
+        # 버튼 시그널 추가 (버튼 클릭 시 특정 함수 실행하도록 연결)
+        self.btn_add.clicked.connect(self.btnAddClick)
+        self.btn_mod.clicked.connect(self.btnModClick)
+        self.btn_del.clicked.connect(self.btnDelClick)
+        # 테이블위젯 더블클릭 시그널
+        self.tblStudent.doubleClicked.connect(self.tblStudentDoubleClick)  
         self.show()
-
-    def initUi(self):
-        uic.loadUi('./mini_pro1/teamprod.ui',self)
-        self.setWindowTitle('상품 확인 및 관리 시스템')
-        self.loadData()
-        self.btn_search.clicked.connect(self.btn_search_click)
-        self.teamprod.doubleClicked.connect(self.teamprodDoubleClick)
-        
-    def btn_second_to_third(self): 
-        self.prod_deli = DeliveryWindow()  
-        self.prod_deli.show()
-        self.close()                       
-        self.deleteLater()
-
-    def btn_second_to_forth(self): 
-        self.prod_deli = HistoryWindow()  
-        self.prod_deli.show()
-        self.close()                       
-        self.deleteLater()
-
+    
+    # 화면의 Input위젯 데이터 초기화(입력 칸을 비우는) 함수
     def clearInput(self):
-        self.prod_number.clear()
-        self.prod_category.clear()
-        self.prod_name.clear()
-        self.prod_price.clear()
-        self.prod_adult.clear()
-        self.prod_amount.clear()
+        self.input_std_id.clear()
+        self.input_std_name.clear()
+        self.input_std_mobile.clear()
+        self.input_std_regyear.clear()
 
-    def makeTable(self, teamprod): 
-            self.teamprod.setSelectionMode(QAbstractItemView.SingleSelection) 
-            self.teamprod.setEditTriggers(QAbstractItemView.NoEditTriggers) 
-            self.teamprod.setColumnCount(6)
-            self.teamprod.setRowCount(len(teamprod))
-            self.teamprod.setHorizontalHeaderLabels(['상품번호','상품카테고리','상품명','상품가격','구매연령제한','상품수량'])
+    # 테이블위젯 더블클릭 시그널처리(입력 칸에 데이터 채우기) 함수
+    def tblStudentDoubleClick(self):
+        selected = self.tblStudent.currentRow()  # 현재 선택된 row의 index를 반환하는 함수
+        std_id = self.tblStudent.item(selected, 0).text()
+        std_name = self.tblStudent.item(selected, 1).text()
+        std_mobile = self.tblStudent.item(selected, 2).text()
+        std_regyear = self.tblStudent.item(selected, 3).text()
+        # QMessageBox.about(self, '더블클릭', f'{std_id}, {std_name}, {std_mobile}, {std_regyear}')
 
-            for i, (prod_number,prod_category,prod_name,prod_price,prod_adult,prod_amount) in enumerate(teamprod):
-                self.teamprod.setItem(i, 0, QTableWidgetItem(str(prod_number)))
-                self.teamprod.setItem(i, 1, QTableWidgetItem(prod_category))
-                self.teamprod.setItem(i, 2, QTableWidgetItem(prod_name))
-                self.teamprod.setItem(i, 3, QTableWidgetItem(str(prod_price)))
-                self.teamprod.setItem(i, 4, QTableWidgetItem(prod_adult))
-                self.teamprod.setItem(i, 5, QTableWidgetItem(str(prod_amount)))
-                
-    def teamprodDoubleClick(self):
-        selected = self.teamprod.currentRow() 
-        number = self.teamprod.item(selected,0).text()
-        category = self.teamprod.item(selected,1).text()
-        name = self.teamprod.item(selected,2).text()
-        price = self.teamprod.item(selected,3).text()
-        adult = self.teamprod.item(selected,4).text()
-        amount = self.teamprod.item(selected,5).text()
-        self.prod_number.setText(number)
-        self.prod_category.setText(category)
-        self.prod_name.setText(name)
-        self.prod_price.setText(price)
-        self.prod_adult.setText(adult)
-        self.prod_amount.setText(amount)
-        self.label.setPixmap(QtGui.QPixmap(prodname[name])) 
+        self.input_std_id.setText(std_id)
+        self.input_std_name.setText(std_name)
+        self.input_std_mobile.setText(std_mobile)
+        self.input_std_regyear.setText(std_regyear)
 
-    def btn_search_click(self):
-        number = self.prod_number.text()
-        category = self.prod_category.text()
-        name = self.prod_name.text()
-        if name == '' and category == '' and number == '':
-            self.loadData()
-            return 
-        else: 
-            if self.searchData(name,number,category) == True:
-                if name == '':
-                    self.label.setPixmap(QtGui.QPixmap(prodname[number])) 
-                elif number == '':    
-                    self.label.setPixmap(QtGui.QPixmap(prodname[name]))
-                else: pass 
-                return
+        # 상태바에 메시지 추가
+        self.statusbar.showMessage(f'{basic_msg} | 수정모드')
+    
+    # 추가버튼 클릭 시그널처리(실행) 함수
+    def btnAddClick(self):
+        
+        # print('추가버튼 클릭')
+        std_id = self.input_std_id.text()
+        std_name = self.input_std_name.text()
+        std_mobile = self.input_std_mobile.text()
+        std_regyear= self.input_std_regyear.text()
+        print(std_name, std_mobile, std_regyear)
+
+        # 입력검증 필수(Validation Check)
+        if std_name == " or std_regyear == ":
+            QMessageBox.warning(self, '경고', '학생이름 또는 입학년도는 필수입니다!')
+            return # 함수를 탈출
+        elif std_id != '':
+            QMessageBox.warning(self, '경고', '기학생정보를 다시 등록할 수 없습니다.')
+            return
+
+        else:
+            print('DB입력 진행!')
+            values= (std_name, std_mobile, std_regyear) # 변수값 3개를 튜플변수 담고
+            if self.addData(values) == True: # 튜블을 파라미터로 전달
+                QMessageBox.about(self, '저장성공', '학생정보 등록 성공 !!! ')
             else:
-                QMessageBox.about(self,'검색실패','관리자에게 문의해주세요!')
+                QMessageBox.about(self, '저장실패', '관리자에게 문의하세요.')
+
+            self.loadData() # 다시 테이블위젯 데이터를 DB에서 조회.
+            self.clearInput() # 인풋값 삭제함수 호출
+
+            self.statusbar.showMessage(f'{basic_msg} | 저장완료')
+
+    # 수정버튼 클릭 시그널처리 함수
+    def btnModClick(self):
+        # print('수정버튼 클릭')
+        std_id = self.input_std_id.text()
+        std_name = self.input_std_name.text()
+        std_mobile = self.input_std_mobile.text()
+        std_regyear= self.input_std_regyear.text()
+        # print(std_name, std_mobile, std_regyear, std_id)
+
+        if std_id == '' or std_name == ''or std_regyear == '':
+            QMessageBox.warning(self, '경고', '학생이름 또는 입학년도는 필수입니다!')
+            return # 함수를 탈출
+        else:
+            print('DB수정 진행!')
+            values = (std_name, std_mobile, std_regyear, std_id)
+            if self.modData(values) == True: 
+                QMessageBox.about(self, '수정성공', '학생정보 수정 성공 !!! ')
+            else:
+                QMessageBox.about(self, '수정실패', '관리자에게 문의하세요.')
+
             self.loadData() 
             self.clearInput() 
 
-    def loadData(self):
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            SELECT *
-            FROM MINIPRO.TEAMPROD
-            '''
-            cursor.execute(query)
-            teamprod = cursor.fetchall()  
-            self.makeTable(teamprod)
-            self.label.setPixmap(QtGui.QPixmap('C:\\Source\\mini_project\\mini_pro1\\200image\\normal.png')) 
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, 'DB 오류', f'DB 작업 중 오류 발생: {e}')
-        finally:
-            cursor.close()
-            conn.close()
+            self.statusbar.showMessage(f'{basic_msg} | 수정완료')
 
-    def searchData(self, name, number, category):
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            SELECT *
-            FROM MINIPRO.TEAMPROD
-            where prod_name = :v_name or prod_number = :v_number or prod_category = :v_category
-            '''
-            cursor.execute(query, {'v_name': name,'v_number':number,'v_category':category})
-            teamprod = cursor.fetchall()  
-            if teamprod:  
-                self.makeTable(teamprod)
-                return True
-            else:
-                return False
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, 'DB 오류', f'DB 작업 중 오류 발생: {e}')
-        finally:
-            cursor.close()
-            conn.close()
-    
-# 배달기사 전용 화면
-class ProdSubWindow(QDialog,QWidget): 
-    def __init__(self):
-        super(ProdSubWindow,self).__init__()
-        self.initUi()
-        self.show()
-    
-    def initUi(self):
-        uic.loadUi('./mini_pro1/delivery.ui',self)
-        self.setWindowTitle('상품 확인 시스템(배달기사 전용)')
-        self.btn_search_d.clicked.connect(self.btn_search_d_click)
+    # 삭제버튼 클릭 
+    def btnDelClick(self):
+        # print('삭제버튼 클릭')
+        std_id = self.input_std_id.text()
 
-    def btn_search_d_click(self, deliverydate):
-        deliverydate = self.prod_delivery.text()  
-        if not deliverydate:
-            QMessageBox.warning(self, '경고', '발주현황 조회시 도착일 입력은 필수입니다!')
-            return
-        try:
-            datetime.strptime(deliverydate, '%Y-%m-%d')  
-        except ValueError:
-            QMessageBox.warning(self, '경고', '도착일은 YYYY-MM-DD 형식으로 입력해야 합니다!')
-            return
-        success = self.searchDeliveryData(deliverydate)
-        if success:
-            QMessageBox.information(self, '성공', '조회가 성공적으로 완료되었습니다!')
+        if std_id == '':
+            QMessageBox.warning(self, '경고', '학생이름 또는 입학년도는 필수입니다!')
+            return # 함수를 탈출
         else:
-            QMessageBox.about(self, '검색실패', '관리자에게 문의해주세요!')
-            self.DeliveryloadData()
-
-    def DeliveryloadData(self):
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            SELECT *
-            FROM MINIPRO.DELIVERY
-            '''
-            cursor.execute(query)
-            delivery = cursor.fetchall()  
-            self.makeTable(delivery)  
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, 'DB 오류', f'DB 작업 중 오류 발생: {e}')
-        finally:
-            cursor.close()
-            conn.close()
-
-    def searchDeliveryData(self, deliverydate):
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            SELECT prod_name, prod_order, substr(to_char(prod_delivery, 'YYYY-MM-DD'), 1, 10), amount
-            FROM MINIPRO.DELIVERY
-            WHERE PROD_DELIVERY = TO_date(:v_deliverydate , 'YYYY-MM-DD')
-            '''
-            cursor.execute(query, {'v_deliverydate': deliverydate})
-            delivery = cursor.fetchall() 
-            if delivery:  
-                self.makeTable(delivery)
-                return True
+            print('DB삭제 진행!')
+            # Oracle은 파라미터 타입에 민감함, 정확한 타입 사용 필요
+            values = (int(std_id), )  # 튜플로 전달, std_id 문자열에서 숫자로 변경해야함
+            if self.delData(values) == True: 
+                QMessageBox.about(self, '삭제성공', '학생정보 삭제 성공 !!! ')
             else:
-                return False
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, 'DB 오류', f'DB 작업 중 오류 발생: {e}')
-        finally:
-            cursor.close()
-            conn.close()
+                QMessageBox.about(self, '삭제실패', '관리자에게 문의하세요.')
 
-    def makeTable(self, delivery): 
-            self.delivery.setSelectionMode(QAbstractItemView.SingleSelection) 
-            self.delivery.setEditTriggers(QAbstractItemView.NoEditTriggers) 
-            self.delivery.setColumnCount(4)
-            self.delivery.setRowCount(len(delivery))
-            self.delivery.setHorizontalHeaderLabels(['상품명','주문일','도착예정일','발주수량'])
-
-            for i, (prod_name,prod_order,prod_delivery,amount) in enumerate(delivery):
-                self.delivery.setItem(i, 0, QTableWidgetItem(prod_name)) 
-                self.delivery.setItem(i, 1, QTableWidgetItem(str(prod_order)))
-                self.delivery.setItem(i, 2, QTableWidgetItem(str(prod_delivery)))
-                self.delivery.setItem(i, 3, QTableWidgetItem(str(amount)))  
-
-class DeliveryWindow(QDialog,QWidget):
-    def __init__(self):
-        super(DeliveryWindow,self).__init__()
-        self.initUi()
-        self.show()
-
-    def initUi(self):
-        uic.loadUi('./mini_pro1/order.ui',self)
-        self.setWindowTitle('발주 신청 및 관리')
-        self.loadData()
-        self.btn_search.clicked.connect(self.btn_search_click)
-        self.btn_add.clicked.connect(self.addData)
-        self.btn_mod.clicked.connect(self.btn_mod_click)
-        self.btn_del.clicked.connect(self.btn_del_click)
-        self.initTable()
-        
-    def btn_third_to_second(self): 
-        self.deli_prod = ProdWindow()                     
-        self.deli_prod.show()
-        self.close()                
-        self.deleteLater()
-
-    def initTable(self):
-        self.delivery.setColumnCount(4)
-        self.delivery.setHorizontalHeaderLabels(['상품명', '주문일자', '입고일자','발주수량'])
-        self.delivery.setEditTriggers(self.delivery.NoEditTriggers)
-    
-    def initTable(self):
-        self.delivery.setColumnCount(4)  
-        self.delivery.setHorizontalHeaderLabels(['상품명', '주문일자', '입고일자', '발주수량'])
-        self.delivery.setEditTriggers(QTableWidget.NoEditTriggers) 
-        self.delivery.setSelectionMode(QTableWidget.SingleSelection)
-    
-    def makeTable(self, delivery): 
-            self.delivery.setSelectionMode(QAbstractItemView.SingleSelection)
-            self.delivery.setEditTriggers(QAbstractItemView.NoEditTriggers) 
-            self.delivery.setColumnCount(4)
-            self.delivery.setRowCount(len(delivery))
-            self.delivery.setHorizontalHeaderLabels(['상품명','주문일자','입고일자','발주수량'])
-            for i, (prod_name,prod_order,prod_delivery,amount) in enumerate(delivery):
-                self.delivery.setItem(i, 0, QTableWidgetItem(str(prod_name))) 
-                self.delivery.setItem(i, 1, QTableWidgetItem(str(prod_order)))
-                self.delivery.setItem(i, 2, QTableWidgetItem(str(prod_delivery)))
-                self.delivery.setItem(i, 3, QTableWidgetItem(str(amount)))
-    
-    def btn_search_click(self):
-        name = self.prod_name.text()
-        if name == '':
-            self.loadData()
-            return 
-        else: 
-            self.searchData(name) 
-            if self.searchData(name) == True:
-                return
-            else:
-                QMessageBox.about(self,'검색실패','관리자에게 문의해주세요!')
             self.loadData() 
+            self.clearInput() 
 
-    def btn_mod_click(self):
-        name = self.prod_name.text()
-        amount = self.prod_amount.text()
-        if name == '' and amount == '':
-            self.loadData()
-            return 
-        else: 
-            if self.modData(name,amount) == True:
-                return
-            else: 
-                QMessageBox.about(self,'수정성공!','발주수량이 변경되었습니다!')
-            self.loadData()
+            self.statusbar.showMessage(f'{basic_msg} | 삭제완료')
 
-    def btn_del_click(self):
-        name = self.prod_name.text()
-        if name == '':
-            self.loadData()
-            return 
-        else:
-            if self.delData(name) == True:
-                QMessageBox.about(self,'삭제성공','학생정보 삭제완료!')
-            else:
-                QMessageBox.about(self,'삭제실패','관리자에게 문의해주세요!')
-            self.loadData() 
+    # 테이블위젯 데이터와 연관해서 화면 설정
+    def makeTable(self, lst_student):
+        self.tblStudent.setSelectionMode(QAbstractItemView.SingleSelection)  # 단일row 선택모드
+        self.tblStudent.setEditTriggers(QAbstractItemView.NoEditTriggers)  # 컬럼수정금지모드
+        self.tblStudent.setColumnCount(4)
+        self.tblStudent.setRowCount(len(lst_student))  # 커서에 들어있는 데이터길이만큼 row 생성
+        self.tblStudent.setHorizontalHeaderLabels(['학생번호', '학생이름', '핸드폰', '입학년도'])
 
+        # 전달받은 cursor를 반복문으로 테이블위젯에 뿌리는 작업
+        for i, (std_id, std_name, std_mobile, std_regyear) in enumerate(lst_student):
+            self.tblStudent.setItem(i, 0, QTableWidgetItem(str(std_id)))  # oracle number 타입은 뿌릴때 str()로 형변환 필요
+            self.tblStudent.setItem(i, 1, QTableWidgetItem(std_name))
+            self.tblStudent.setItem(i, 2, QTableWidgetItem(std_mobile))
+            self.tblStudent.setItem(i, 3, QTableWidgetItem(str(std_regyear)))
+
+    # R(SELECT)
     def loadData(self):
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            SELECT prod_name, prod_order, substr(to_char(prod_delivery, 'YYYY-MM-DD'),1 , 10), amount
-            FROM MINIPRO.DELIVERY
-            '''
-            cursor.execute(query)
-            delivery = cursor.fetchall() 
-            if delivery: 
-                self.makeTable(delivery)
-                return True
-            else:
-                return False
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, 'DB 오류', f'DB 작업 중 오류 발생: {e}')
-        finally:
-            cursor.close()
-            conn.close()
-
-    def searchData(self, name):
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            SELECT *
-                FROM MINIPRO.DELIVERY
-              WHERE prod_name = :v_name 
-            '''
-            cursor.execute(query, {'v_name': name})
-            delivery = cursor.fetchall()  
-            if delivery:
-                self.makeTable(delivery)
-                return True
-            else:
-                return False
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, 'DB 오류', f'DB 작업 중 오류 발생: {e}')
-        finally:
-            cursor.close()
-            conn.close()
-
-    def addData(self):
-        prod_name = self.prod_name.text()  
-        amount = self.prod_amount.text()  
-        if not prod_name or not amount:
-            QMessageBox.warning(self, "경고", "상품명과 수량을 입력하세요!")
-            return
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            INSERT INTO MINIPRO.DELIVERY
-              (prod_name,prod_order,prod_delivery,amount)
-           VALUES (:v_prod_name,trunc(sysdate),trunc(sysdate+3),:v_amount)
-            '''
-            cursor.execute(query, {'v_prod_name': prod_name, 'v_amount': amount})
-            conn.commit()  
-            query = '''
-            SELECT prod_name, prod_order, to_char(prod_delivery, 'YYYY-MM-DD'), amount
-            FROM MINIPRO.delivery
-            WHERE prod_name = :v_prod_name
-            '''
-            cursor.execute(query, {'v_prod_name': prod_name})
-            updated_rows = cursor.fetchall()  
-            if updated_rows:
-                self.displayUpdates(updated_rows)
-                QMessageBox.information(self, "성공", "주문이 성공적으로 업데이트되었습니다!")
-            else:
-                QMessageBox.information(self, "정보", "해당 상품명이 존재하지 않습니다.")
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, "DB 오류", f"오류: {e}")
-        finally:
-            cursor.close()
-            conn.close()
-
-    def modData(self, name, amount):
-        name = self.prod_name.text()  
-        amount = self.prod_amount.text()  
-        if not name or not amount:
-            QMessageBox.warning(self, "경고", "상품명과 수량을 입력하세요!")
-            return
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            UPDATE MINIPRO.DELIVERY SET
-                  amount = :v_amount
-                , prod_order = sysdate 
-                , prod_delivery = sysdate + 3
-             WHERE prod_name = :v_name
-            '''
-            cursor.execute(query, {'v_name': name, 'v_amount': amount})
-            conn.commit()
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, "DB 오류", f"오류: {e}")
-        finally:
-            cursor.close()
-            conn.close()
-
-    def delData(self,name):
-        name = self.prod_name.text()
-        isSuccede = False 
-        conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
+        # DB연결
+        conn = oci.connect(f'{username}/{password}@{host}:{port}/{sid}')
         cursor = conn.cursor()
+
+        query = '''SELECT std_id, std_name
+	                    , std_mobile, std_regyear
+                     FROM Students'''
+        cursor.execute(query)
+
+        # for i, item in enumerate(cursor, start=1):
+        #     print(item)
+        lst_student = []  # 리스트 생성
+        for _, item in enumerate(cursor):
+            lst_student.append(item)
+
+        self.makeTable(lst_student)  # 새로 생성한 리스트를 파라미터로 전달
+
+        cursor.close()
+        conn.close()
+
+    # C(INSERT)
+    def addData(self, tuples):
+        isSucceed = False  # 성공여부 플래그(참/거짓) 변수
+        conn = oci.connect(f'{username}/{password}@{host}:{port}/{sid}')
+        cursor = conn.cursor()
+
         try:
-            conn.begin() 
+            conn.begin()  # BEGIN TRANSACTION 트랜잭션 시작
+
+            #쿼리작성
             query = '''
-                    UPDATE MINIPRO.DELIVERY SET
-                           amount = null
-                        , prod_order = null
-                        , prod_delivery = null
-                    WHERE prod_name = :v_name
+                    INSERT INTO MADANG.STUDENTS (std_id, std_name, std_mobile, std_regyear)
+                    VALUES (SEQ_STUDENT.NEXTVAL, :v_std_name, :v_std_mobile, :v_std_regyear)
                     '''
-            cursor.execute(query, {'v_name':name})
-            conn.commit() 
-            isSuccede = True 
+            cursor.execute(query, tuples)  # query에 들어가는 동작변수 3개는 뒤의 tuples 순서대로 매핑시켜줌
+
+            conn.commit()  # DB commit 동일기능
+            last_id = cursor.lastrowid  # SEQ_STUDENT_CORRVAL
+            print(last_id)
+            isSucceed = True  # 트랜잭션 성공
         except Exception as e:
             print(e)
-            conn.rollback() 
-            isSuccede = False
+            conn.rollback()  # DB rollback 동일기능
+            isSucceed = False  # 트랜잭션 실패
         finally:
             cursor.close()
             conn.close()
-        return isSuccede
 
-    def displayUpdates(self, rows):
-        self.delivery.setRowCount(len(rows))  
-        for i, row in enumerate(rows):
-            for j, value in enumerate(row):
-                self.delivery.setItem(i, j, QTableWidgetItem(str(value)))
-
-class HistoryWindow(QDialog, QWidget):
-    def __init__(self):
-        super(HistoryWindow, self).__init__()
-        self.initUi()
-        self.show()
-
-    def initUi(self):
-        uic.loadUi('./mini_pro1/history.ui', self)
-        self.setWindowTitle('상품판매 시스템')
-        self.loadData()
-        self.btn_add.clicked.connect(self.btn_add_click)
+        # 줄 잘 맞춰야함!!!
+        return isSucceed  # 트랜잭션 여부를 리턴
     
-    def btn_forth_to_second(self): 
-        self.deli_prod = ProdWindow()                     
-        self.deli_prod.show()
-        self.close()                
-        self.deleteLater()
+    # U(UPDATE)
+    def modData(self, tuples):
+        isSucceed = False  
+        conn = oci.connect(f'{username}/{password}@{host}:{port}/{sid}')
+        cursor = conn.cursor()
 
-    def btn_forth_to_third(self): 
-        self.deli_prod = DeliveryWindow()                     
-        self.deli_prod.show()
-        self.close()                
-        self.deleteLater()
-
-    def makeTable(self, history):
-            self.history.setSelectionMode(QAbstractItemView.SingleSelection)
-            self.history.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            self.history.setColumnCount(5)
-            self.history.setRowCount(len(history))
-            self.history.setHorizontalHeaderLabels(['판매날짜','상품카테고리','상품명','상품수량','상품가격'])
-            for i, (cell_date,prod_category,prod_name,cell_amount,cell_price) in enumerate(history):
-                self.history.setItem(i, 0, QTableWidgetItem(str(cell_date))) 
-                self.history.setItem(i, 1, QTableWidgetItem(str(prod_category)))
-                self.history.setItem(i, 2, QTableWidgetItem(str(prod_name)))
-                self.history.setItem(i, 3, QTableWidgetItem(str(cell_amount)))
-                self.history.setItem(i, 4, QTableWidgetItem(str(cell_price)))
-
-    def btn_add_click(self):
-        category = self.prod_category.text()
-        name = self.prod_name.text()
-        amount = self.prod_amount.text()
-        price = self.prod_price.text()
-        if  category == '' and name == ''and price == ''and amount == '':
-            self.loadData()
-            return 
-        else: 
-            if self.addData(category,name,price,amount) == True:
-                return
-            else:
-                pass
-            self.loadData() 
-
-    def loadData(self):
         try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
-            query = '''
-            SELECT *
-            FROM MINIPRO.HISTORY
-            '''
-            cursor.execute(query)
-            history = cursor.fetchall() 
-            if history: 
-                self.makeTable(history)
-                return True
-            else:
-                return False
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, 'DB 오류', f'DB 작업 중 오류 발생: {e}')
-        finally:
-            cursor.close()
-            conn.close()
+            conn.begin()  
 
-    def addData(self,category,name,price,amount):
-        category = self.prod_category.text()
-        name = self.prod_name.text()
-        amount = self.prod_amount.text()  
-        price = self.prod_price.text()
-        if  not category or not name or not amount or not price:
-            QMessageBox.warning(self, "경고", "상품명과 수량을 입력하세요!")
-            return
-        try:
-            conn = oci.connect(f'{username_m}/{password_m}@{host_m}:{port_m}/{sid_m}')
-            cursor = conn.cursor()
             query = '''
-            INSERT INTO MINIPRO.HISTORY 
-              (cell_date,prod_category,prod_name,cell_amount,cell_price)
-           VALUES (sysdate,:v_prod_category,:v_prod_name,:v_cell_amount,:v_cell_price)
-            '''
-            cursor.execute(query, {'v_prod_category' : category,'v_prod_name': name, 'v_cell_amount': amount, 'v_cell_price' : price})
+                    UPDATE MADANG.STUDENTS
+                       SET std_name = :v_std_name
+                         , std_mobile = :v_std_mobile
+                         , std_regyear = :v_std_regyear
+                     WHERE std_id = :v_std_id
+                    '''
+            cursor.execute(query, tuples)  
+
             conn.commit()  
-            query = '''
-            SELECT *
-            FROM MINIPRO.HISTORY
-            WHERE prod_name = :v_prod_name
-            '''
-            cursor.execute(query, {'v_prod_name': name})
-            updated_rows = cursor.fetchall() 
-            if updated_rows:
-                self.makeTable(updated_rows)
-                QMessageBox.information(self, "성공", "주문이 성공적으로 업데이트되었습니다!")
-            else:
-                QMessageBox.information(self, "정보", "해당 상품명이 존재하지 않습니다.")
-        except oci.DatabaseError as e:
-            QMessageBox.critical(self, "DB 오류", f"오류: {e}")
+            isSucceed = True  
+        except Exception as e:
+            print(e)
+            conn.rollback()  
+            isSucceed = False  
         finally:
             cursor.close()
             conn.close()
 
+        return isSucceed  
+    
+    # D(DELETE)
+    def delData(self, tuples):
+        isSucceed = False  
+        conn = oci.connect(f'{username}/{password}@{host}:{port}/{sid}')
+        cursor = conn.cursor()
+
+        try:
+            conn.begin()  
+
+            query = '''
+                    DELETE FROM Students WHERE std_id = :v_std_id
+                    '''
+            cursor.execute(query, tuples)  
+
+            conn.commit()  
+            isSucceed = True  
+        except Exception as e:
+            print(e)
+            conn.rollback()  
+            isSucceed = False  
+        finally:
+            cursor.close()
+            conn.close()
+
+        return isSucceed  
+
+        
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     win = MainWindow()
-    win.show()
-    sys.exit(app.exec_())
-
-
-
+    app.exec_()
